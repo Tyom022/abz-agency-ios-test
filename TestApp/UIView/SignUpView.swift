@@ -24,7 +24,8 @@ struct SignUpView: View {
     @State private var selectedImage: UIImage?
     @State private var imageSource: UIImagePickerController.SourceType = .photoLibrary
     @State private var showValidationMessages = false
-    
+    @State private var showActionSheet = false
+
     @State private var navigateToSuccess = false
     @State private var navigateToError = false
     
@@ -36,7 +37,6 @@ struct SignUpView: View {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
     
-    let token = "eyJpdiI6Im9mV1NTMlFZQTlJeWlLQ3liVks1MGc9PSIsInZhbHVlIjoiRTJBbUR4dHp1dWJ3ekQ4bG85WVZya3ZpRGlMQ0g5ZHk4M"
     
     var body: some View {
         NavigationStack {
@@ -122,7 +122,8 @@ struct SignUpView: View {
 
                             Spacer()
                             Button(action: {
-                                isImagePickerPresented.toggle()
+                                showActionSheet = true
+
                             }) {
                                 Text("Upload")
                                     .foregroundColor(Color(red: 0/255, green: 155/255, blue: 189/255))
@@ -130,7 +131,32 @@ struct SignUpView: View {
                                     .padding(.horizontal, 12)
                                     .background(Color.clear)
                                     .cornerRadius(8)
+                            }.actionSheet(isPresented: $showActionSheet) {
+                                ActionSheet(
+                                    title: Text("Choose how you want to add a photo"),
+                                    buttons: [
+                                        .default(Text("Camera")) {
+                                            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                                                    imageSource = .camera
+                                                isImagePickerPresented = true
+                                                }
+                                        },
+                                        .default(Text("Gallery")) {
+                                            imageSource = .photoLibrary
+                                            isImagePickerPresented = true
+                                        },
+                                        .cancel()
+                                    ]
+                                )
                             }
+                            .sheet(isPresented: $isImagePickerPresented) {
+                                ImagePickerController(
+                                    selectedImage: $selectedImage,
+                                    isImagePickerPresented: $isImagePickerPresented,
+                                    imageSource: imageSource
+                                )
+                            }
+                        
                             .padding(.trailing, 10) // Padding for the right side
                         }
                         .padding()
@@ -152,32 +178,8 @@ struct SignUpView: View {
                     }
                     
                     Button(action: {
-                        showValidationMessages = true
+                        getTokenAndRegisterUser()
                         
-                        // Proceed with registration if all fields are valid
-                        if name.isEmpty || email.isEmpty || phone.isEmpty || selectedImage == nil {
-                            return
-                        }
-
-                        // Email validation
-                        if !isValidEmail(email) {
-                            navigateToError = true  // Navigate to RegisterError if email is invalid
-                            return
-                        }
-                        
-                        // Proceed with registration if all fields are valid
-                        NetworkManager.registerUser(name: name, email: email, phone: phone, positionID: selectedOption + 1, photo: selectedImage!, token: token) { result in
-                            switch result {
-                            case .success(let response):
-                                // Handle successful registration response
-                                print("User registered successfully: \(response.message)")
-                                navigateToSuccess = true // Navigate to RegisterSuccess on success
-                            case .failure(let error):
-                                // Handle failure (e.g., phone/email already exists)
-                                print("Error: \(error.localizedDescription)")
-                                navigateToError = true  // Navigate to RegisterError in case of failure
-                            }
-                        }
                     }) {
                         Text("Sign Up")
                             .foregroundColor(.black)
@@ -211,7 +213,41 @@ struct SignUpView: View {
             }
         }
     }
-    
+    private func getTokenAndRegisterUser() {
+            NetworkManager.fetchToken { result in
+                switch result {
+                case .success(let token):
+                    print("Fetched token: \(token)")
+                    
+                    // If the token is Base64-encoded, decode it
+                           if let decodedData = Data(base64Encoded: token),
+                              let decodedString = String(data: decodedData, encoding: .utf8) {
+                               print("Decoded Token: \(decodedString)")
+                           }
+                    // After getting the token, proceed to register the user
+                    NetworkManager.registerUser(
+                        name: name,
+                        email: email,
+                        phone: phone,
+                        positionID: selectedOption + 1,
+                        photo: selectedImage ?? UIImage(),
+                        completion: { result in
+                            switch result {
+                            case .success(let response):
+                                print("User registered successfully: \(response.message)")
+                                navigateToSuccess = true
+                            case .failure(let error):
+                                print("Error: \(error.localizedDescription)")
+                                navigateToError = true
+                            }
+                        }
+                    )
+                case .failure(let error):
+                    print("Token fetch failed: \(error)")
+                    navigateToError = true
+                }
+            }
+        }
     private func isValidEmail(_ email: String) -> Bool {
         // Simple email validation logic (adjust as needed)
         let regex = try! NSRegularExpression(pattern: "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", options: [])
