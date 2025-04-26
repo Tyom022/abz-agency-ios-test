@@ -64,7 +64,7 @@ struct RegisterError: View {
             }
         }
         .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .tabBar) // Hides tab bar
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
